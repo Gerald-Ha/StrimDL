@@ -1,5 +1,8 @@
 # GH Media Downloader UI
 
+<img src="https://github.com/user-attachments/assets/5d6e8808-90de-4251-88f5-2f305e77412b" width="600" height="auto">
+&nbsp;
+
 A simple, modern web interface to download media from **YouTube** and **X (formerly Twitter)** using [yt-dlp](https://github.com/yt-dlp/yt-dlp) and Python.
 
 Supports direct downloads as:
