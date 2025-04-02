@@ -1,4 +1,4 @@
-# GH Media Downloader UI
+# GH Media Downloader
 
 <img src="https://github.com/user-attachments/assets/5d6e8808-90de-4251-88f5-2f305e77412b" width="600" height="auto">
 &nbsp;
