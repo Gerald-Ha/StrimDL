@@ -1,9 +1,9 @@
 version: "3.8"
 
 services:
-  twitter-media-downloader:
-    image: ghcr.io/flandredaisuki/twitter-media-downloader:2.1.0
-    container_name: twitter-media-downloader
+  strimdl:
+    build: .
+    container_name: strimdl
     restart: unless-stopped
     ports:
       - "${PORT:-10001}:10001"
@@ -12,6 +12,9 @@ services:
       - LANG=${LANG}
       - VIDEO_NAMING_PATTERN=${VIDEO_NAMING_PATTERN}
       - IMAGE_NAMING_PATTERN=${IMAGE_NAMING_PATTERN}
+      - STRIMDL_USER=${STRIMDL_USER}
+      - STRIMDL_PASS=${STRIMDL_PASS}
     volumes:
       - "${DOWNLOAD_PATH}:/download"
     command: /app/server.py
+

@@ -1,6 +1,6 @@
 FROM alpine:3.19.2
 
-# System-Abhängigkeiten installieren: Zeitzone, Python, ffmpeg
+
 RUN apk add --no-cache tzdata python3 ffmpeg \
     && mkdir -p /app \
     && apk add --virtual build-deps curl \
@@ -8,21 +8,24 @@ RUN apk add --no-cache tzdata python3 ffmpeg \
     && chmod +x /usr/bin/yt-dlp \
     && apk del build-deps
 
-# Server-Skripte und HTML-Dateien kopieren
-COPY server.py index.html /app/
+
+COPY server.py index.html login.html /app/
+COPY css /app/css
+COPY image /app/image
 
 
-# Server ausführbar machen
+
+
 RUN chmod +x /app/server.py
 
-# Arbeitsverzeichnis setzen
+
 WORKDIR /app
 
-# Port freigeben
+
 EXPOSE 10001
 
-# Ausgabe direkt anzeigen (z. B. für Docker Logs)
+
 ENV PYTHONUNBUFFERED=1
 
-# Startbefehl
+
 CMD [ "/app/server.py" ]

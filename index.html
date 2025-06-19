@@ -2,123 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>GH Twitter/Youtube Video Downloader</title>
+  <title>StrimDL - YouTube & X Downloader</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #121212;
-      --card: #1e1e1e;
-      --accent: #00b3ff;
-      --text: #f0f0f0;
-      --muted: #999;
-      --input-bg: #2c2c2c;
-      --border: #333;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      background: var(--bg);
-      font-family: 'Inter', sans-serif;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      height: 100vh;
-      margin: 0;
-      color: var(--text);
-    }
-
-    .card {
-      background: var(--card);
-      padding: 2rem;
-      border-radius: 1rem;
-      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
-      max-width: 500px;
-      width: 100%;
-    }
-
-    h1 {
-      font-size: 1.6rem;
-      margin-bottom: 1.5rem;
-      text-align: center;
-      color: var(--text);
-    }
-
-    form {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-
-    input[type="text"],
-    select {
-      padding: 0.75rem 1rem;
-      border-radius: 0.5rem;
-      border: 1px solid var(--border);
-      background: var(--input-bg);
-      color: var(--text);
-      font-size: 1rem;
-      width: 100%;
-    }
-
-    select:disabled {
-      background-color: #3a3a3a;
-      color: var(--muted);
-    }
-
-    button {
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      padding: 0.75rem;
-      font-size: 1rem;
-      border-radius: 0.5rem;
-      cursor: pointer;
-      transition: background 0.3s ease;
-    }
-
-    button:hover {
-      background: #009dd6;
-    }
-
-    #result {
-      margin-top: 1rem;
-      font-weight: 600;
-      color: var(--muted);
-      text-align: center;
-    }
-
-    .developer-link {
-      margin-top: 1rem;
-      font-size: 0.9rem;
-      color: var(--muted);
-      text-align: center;
-    }
-
-    .developer-link a {
-      color: var(--accent);
-      text-decoration: none;
-    }
-
-    .developer-link a:hover {
-      text-decoration: underline;
-    }
-
-    @media (max-width: 600px) {
-      .card {
-        margin: 1rem;
-        padding: 1.5rem;
-      }
-    }
-  </style>
+  
+  <link rel="stylesheet" href="css/style.css" id="classicTheme" />
+  
+  <link rel="icon" type="image/png" href="image/logo-s.png" />
 </head>
 <body>
+  <button id="logoutBtn">Logout</button>
+  
   <div class="card">
-    <h1>🎥 GH Twitter/Youtube Video Downloader</h1>
+    <h1><img src="image/logo-s.png" alt="Logo" class="logo-inline"> StrimDL - YouTube & X Downloader</h1>
     <form id="downloadForm">
       <input
         type="text"
@@ -130,7 +25,9 @@
         <option value="mp4">🎬 Video (.mp4)</option>
         <option value="mp3">🎵 Audio (.mp3)</option>
       </select>
-      <button type="submit">Start Download</button>
+      <button type="button" id="qualityBtn" style="display:none;">Select Quality</button>
+      <select id="qualitySelect" style="display:none;"></select>
+      <button type="submit" id="mainActionBtn">Search</button>
     </form>
     <p id="result"></p>
   </div>
@@ -139,33 +36,246 @@
     Developer: <a href="https://github.com/Gerald-Ha?tab=repositories" target="_blank" rel="noopener noreferrer">Gerald-Ha</a>
   </div>
 
+  <div id="qualityModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <ul id="qualityList"></ul>
+    </div>
+  </div>
+
   <script>
-    const form = document.getElementById('downloadForm');
+    const downloadForm = document.getElementById('downloadForm');
     const result = document.getElementById('result');
     const urlInput = document.getElementById('urlInput');
     const formatSelect = document.getElementById('formatSelect');
+    const qualitySelect = document.getElementById('qualitySelect');
+    const qualityBtn = document.getElementById('qualityBtn');
+    const qualityModal = document.getElementById('qualityModal');
+    const qualityList = document.getElementById('qualityList');
+    const closeModal = document.querySelector('.close');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const mainActionBtn = document.getElementById('mainActionBtn');
+    let lastQualities = [];
+    let selectedQuality = '';
+    let lastUrl = '';
+    let qualitiesLoaded = false;
+    let searchClicked = false;
 
-    function updateFormatSelectState() {
-      const url = urlInput.value.trim();
-      const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
-      formatSelect.disabled = !isYouTube;
+    function resetUIForNewUrl() {
+      qualitiesLoaded = false;
+      selectedQuality = '';
+      lastQualities = [];
+      qualityBtn.style.display = 'none';
+      qualityBtn.textContent = 'Select Quality';
+      qualitySelect.style.display = 'none';
+      mainActionBtn.textContent = 'Search';
+      mainActionBtn.disabled = false;
+      result.textContent = '';
+      searchClicked = false;
     }
 
-    urlInput.addEventListener('input', updateFormatSelectState);
+    function showLogoutIfLoggedIn() {
+      if (window.getComputedStyle(downloadForm).display !== 'none') {
+        logoutBtn.style.display = 'block';
+      } else {
+        logoutBtn.style.display = 'none';
+      }
+    }
 
-    form.addEventListener('submit', (e) => {
+    async function fetchYouTubeQualities(url) {
+      result.textContent = '🔎 Checking available qualities...';
+      mainActionBtn.disabled = true;
+      try {
+        const res = await fetch(`/yt-qualities?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        if (data.ok && data.qualities && data.qualities.length > 0) {
+          lastQualities = data.qualities;
+          qualitiesLoaded = true;
+          qualityList.innerHTML = '';
+          data.qualities.forEach(q => {
+            const li = document.createElement('li');
+            li.textContent = q.label;
+            li.style.cursor = 'pointer';
+            li.style.padding = '8px 0';
+            li.onclick = () => {
+              selectedQuality = q.format_id;
+              qualityBtn.textContent = q.label;
+              qualityModal.style.display = 'none';
+              mainActionBtn.disabled = false;
+              result.textContent = '';
+            };
+            qualityList.appendChild(li);
+          });
+          qualityBtn.style.display = '';
+          qualityBtn.textContent = 'Select Quality';
+          qualitySelect.style.display = 'none';
+          mainActionBtn.textContent = 'Start Download';
+          mainActionBtn.disabled = false;
+          result.textContent = '';
+        } else {
+          qualityBtn.style.display = 'none';
+          qualitySelect.style.display = 'none';
+          mainActionBtn.textContent = 'Search';
+          mainActionBtn.disabled = false;
+          result.textContent = 'No qualities found.';
+        }
+      } catch (e) {
+        qualityBtn.style.display = 'none';
+        qualitySelect.style.display = 'none';
+        mainActionBtn.textContent = 'Search';
+        mainActionBtn.disabled = false;
+        result.textContent = 'Could not fetch qualities.';
+      }
+    }
+
+    async function updateQualityOptions() {
+      const url = urlInput.value.trim();
+      const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
+      const isX = url.includes('twitter.com') || url.includes('x.com');
+      if (url !== lastUrl) {
+        resetUIForNewUrl();
+        lastUrl = url;
+      }
+      if (isYouTube) {
+        formatSelect.disabled = false;
+        qualityBtn.style.display = 'none';
+        qualitySelect.style.display = 'none';
+        mainActionBtn.textContent = 'Search';
+        mainActionBtn.disabled = false;
+        result.textContent = '';
+      } else if (isX) {
+        formatSelect.value = 'mp4';
+        formatSelect.disabled = true;
+        qualityBtn.style.display = 'none';
+        qualitySelect.style.display = 'none';
+        mainActionBtn.textContent = 'Start Download';
+        mainActionBtn.disabled = false;
+        result.textContent = '';
+      } else {
+        formatSelect.disabled = false;
+        qualityBtn.style.display = 'none';
+        qualitySelect.style.display = 'none';
+        mainActionBtn.textContent = 'Start Download';
+        mainActionBtn.disabled = false;
+        result.textContent = '';
+      }
+    }
+
+    urlInput.addEventListener('input', () => {
+      updateQualityOptions();
+      result.textContent = '';
+      mainActionBtn.disabled = false;
+    });
+
+    qualityBtn.onclick = function() {
+      if (lastQualities.length > 0) {
+        qualityModal.style.display = 'flex';
+      }
+    };
+    qualityList.addEventListener('click', function(e) {
+      if (e.target && e.target.nodeName === 'LI') {
+        mainActionBtn.disabled = false;
+        result.textContent = '';
+      }
+    });
+    closeModal.onclick = function() {
+      qualityModal.style.display = 'none';
+    };
+    window.onclick = function(event) {
+      if (event.target == qualityModal) {
+        qualityModal.style.display = 'none';
+      }
+    };
+
+    downloadForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const url = urlInput.value.trim();
+      const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
+      const isX = url.includes('twitter.com') || url.includes('x.com');
       const format = formatSelect.value;
-
+      let quality = qualityBtn.style.display !== 'none' && selectedQuality ? selectedQuality : '';
       if (!url) {
-        result.textContent = '⚠️ Please enter a valid URL.';
+        result.textContent = 'Please enter a valid URL.';
         return;
       }
+      if (isYouTube && !searchClicked) {
+        searchClicked = true;
+        await fetchYouTubeQualities(url);
+        return;
+      }
+      if (isYouTube && qualitiesLoaded && !quality && lastQualities.length > 0) {
+        let best = lastQualities[0];
+        let bestSize = 0;
+        lastQualities.forEach(q => {
+          const sizeMatch = q.label.match(/~(\d+)MB/);
+          if (sizeMatch) {
+            const size = parseInt(sizeMatch[1]);
+            if (size > bestSize) {
+              best = q;
+              bestSize = size;
+            }
+          }
+        });
+        quality = best.format_id;
+        selectedQuality = quality;
+        qualityBtn.textContent = best.label;
+      }
+      result.textContent = '⏳ Preparing download...';
+      mainActionBtn.disabled = true;
+      let query = `/download?url=${encodeURIComponent(url)}`;
+      if (!formatSelect.disabled) query += `&format=${format}`;
+      if (isYouTube && quality) query += `&quality=${quality}`;
+      try {
+        const res = await fetch(query, { method: 'GET' });
+        if (res.status === 200 && res.headers.get('Content-Type') && res.headers.get('Content-Type').includes('application/json')) {
+          const data = await res.json();
+          if (!data.ok) {
+            result.textContent = 'Invalid or unsupported link.';
+            mainActionBtn.disabled = false;
+            return;
+          }
+        } else if (res.status !== 200) {
+          result.textContent = 'Invalid or unsupported link.';
+          mainActionBtn.disabled = false;
+          return;
+        } else {
+          const blob = await res.blob();
+          const contentDisposition = res.headers.get('Content-Disposition');
+          let filename = 'download';
+          if (contentDisposition) {
+            const match = contentDisposition.match(/filename\*=UTF-8''([^;\n]*)/);
+            if (match) filename = decodeURIComponent(match[1]);
+          }
+          const urlBlob = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = urlBlob;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(urlBlob);
+          result.textContent = '';
+          mainActionBtn.disabled = false;
+        }
+      } catch (err) {
+        result.textContent = 'Invalid or unsupported link.';
+        mainActionBtn.disabled = false;
+      }
+    });
 
-      result.textContent = '⏳ Download started...';
-      const query = `/download?url=${encodeURIComponent(url)}${!formatSelect.disabled ? `&format=${format}` : ''}`;
-      window.location.href = query;
+    logoutBtn.onclick = async function() {
+      await fetch('/logout', { method: 'POST' });
+      window.location.href = '/login.html';
+    };
+
+    window.addEventListener('DOMContentLoaded', showLogoutIfLoggedIn);
+    window.addEventListener('pageshow', function() {
+      result.textContent = '';
+      mainActionBtn.disabled = false;
+    });
+    window.addEventListener('beforeunload', function() {
+      result.textContent = '';
+      mainActionBtn.disabled = false;
     });
   </script>
 </body>

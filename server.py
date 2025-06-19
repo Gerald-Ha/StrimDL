@@ -2,9 +2,9 @@
 
 # ------------------------------------------------------------------------------
 # Metadata
-# Version: 1.0.1
+# Version: 2.0.0
 # Author/Dev: Gerald Hasani
-# Name: GH Twitter/Youtube Video Downloader
+# Name: StrimDL - YouTube & X Downloader
 # Email: contact@gerald-hasani.com
 # GitHub: https://github.com/Gerald-Ha
 # ------------------------------------------------------------------------------
@@ -19,8 +19,7 @@ import urllib.parse
 import subprocess
 from urllib.parse import quote
 from typing import Dict, Any, Optional, Tuple, List
-
-
+import hashlib
 
 APP_ROOT = Path(__file__).resolve().parent
 HOSTNAME = '0.0.0.0'
@@ -36,7 +35,61 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
 
+    def do_POST(self):
+        parsed_path = urllib.parse.urlparse(self.path)
+        if parsed_path.path == '/login':
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            try:
+                data = json.loads(body)
+                username = data.get('username', '')
+                password = data.get('password', '')
+                env_user = os.environ.get('STRIMDL_USER', '')
+                env_pass = os.environ.get('STRIMDL_PASS', '')
+                if username == env_user and password == env_pass:
+
+                    session = hashlib.sha256(f'{username}:{password}'.encode()).hexdigest()
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.send_header('Set-Cookie', f'session={session}; Path=/; HttpOnly')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'ok': True}).encode())
+                else:
+                    self.send_json_response(401, {'ok': False, 'reason': 'Invalid credentials'})
+            except Exception as e:
+                self.send_json_response(400, {'ok': False, 'reason': str(e)})
+        elif parsed_path.path == '/logout':
+
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Set-Cookie', 'session=deleted; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly')
+            self.end_headers()
+            self.wfile.write(json.dumps({'ok': True}).encode())
+        else:
+            self.send_json_response(404, {'ok': False, 'reason': f'Unknown POST endpoint: {self.path}'})
+
+    def is_authenticated(self):
+        env_user = os.environ.get('STRIMDL_USER', '')
+        env_pass = os.environ.get('STRIMDL_PASS', '')
+        if not env_user or not env_pass:
+            return True
+        cookie = self.headers.get('Cookie', '')
+        session = hashlib.sha256(f'{env_user}:{env_pass}'.encode()).hexdigest()
+        return f'session={session}' in cookie
+
     def handle_index_page(self) -> None:
+        if not self.is_authenticated():
+
+            try:
+                with open(APP_ROOT / 'login.html', 'r', encoding='utf-8') as f:
+                    html = f.read()
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                self.wfile.write(html.encode())
+            except Exception as e:
+                self.send_json_response(500, {'ok': False, 'reason': f'Error loading login page: {e}'})
+            return
         try:
             with open(APP_ROOT / 'index.html', 'r', encoding='utf-8') as f:
                 html = f.read()
@@ -45,7 +98,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(html.encode())
         except Exception as e:
-            self.send_json_response(500, {'ok': False, 'reason': f'Fehler beim Laden der Startseite: {e}'})
+            self.send_json_response(500, {'ok': False, 'reason': f'Error loading index page: {e}'})
 
     def parse_twitter_url(self, url: str) -> Optional[Tuple[str, str]]:
         parsed_url = urllib.parse.urlparse(url)
@@ -68,15 +121,19 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             return None
 
     def handle_download_request(self, query: Dict[str, List[str]]) -> None:
+        if not self.is_authenticated():
+            self.send_json_response(401, {'ok': False, 'reason': 'Not authenticated'})
+            return
         url = query.get('url', [''])[0]
         format_param = query.get('format', ['mp4'])[0].lower()
+        quality = query.get('quality', [''])[0]
 
-        # YOUTUBE
+        # YOUTUBE Code zeile -------------->
         if 'youtube.com' in url or 'youtu.be' in url:
             file_ext = 'mp3' if format_param == 'mp3' else 'mp4'
             video_title = self.get_youtube_title(url)
             if not video_title:
-                self.send_json_response(500, {'ok': False, 'reason': 'Konnte Videotitel nicht abrufen.'})
+                self.send_json_response(500, {'ok': False, 'reason': 'Could not fetch video title.'})
                 return
 
             filename = f"{video_title}.{file_ext}"
@@ -88,7 +145,33 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 cmd += ['--extract-audio', '--audio-format', 'mp3', '--output', '-', url]
                 content_type = 'audio/mpeg'
             else:
-                cmd += ['--format', 'mp4', '--output', '-', url]
+                if not quality:
+                    # Hole alle Formate und wähle das mit größter filesize_approx
+                    try:
+                        result = subprocess.run(
+                            ['yt-dlp', '--no-warnings', '--skip-download', '-j', url],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            check=True
+                        )
+                        info = json.loads(result.stdout)
+                        best_fmt = None
+                        best_size = 0
+                        for fmt in info.get('formats', []):
+                            size = fmt.get('filesize_approx') or 0
+                            if size and size > best_size:
+                                best_fmt = fmt.get('format_id')
+                                best_size = size
+                        if best_fmt:
+                            quality = best_fmt
+                    except Exception as e:
+                        pass  # Fallback: kein quality setzen, Standardformat nehmen
+                if quality:
+                    cmd += ['-f', quality]
+                else:
+                    cmd += ['--format', 'mp4']
+                cmd += ['--output', '-', url]
                 content_type = 'video/mp4'
 
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -106,7 +189,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response(500, {'ok': False, 'reason': result.stderr.decode('utf-8')})
             return
 
-        # TWITTER
+        # TWITTER Code zeile -------------->
         url_info = self.parse_twitter_url(url)
         if not url_info:
             self.send_json_response(400, {'ok': False, 'reason': f"Ungültige URL: '{url}'"})
@@ -135,13 +218,80 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed_path = urllib.parse.urlparse(self.path)
 
+        # ────────────────────────────────────────────────────────────────────
+        if parsed_path.path.startswith('/css/') or parsed_path.path.startswith('/image/'):
+            return super().do_GET()
+        # ────────────────────────────────────────────────────────────────────
+
         if parsed_path.path == '/':
             self.handle_index_page()
+
+        elif parsed_path.path == '/login.html':
+            try:
+                with open(APP_ROOT / 'login.html', 'r', encoding='utf-8') as f:
+                    html = f.read()
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                self.wfile.write(html.encode())
+            except Exception as e:
+                self.send_json_response(500, {'ok': False, 'reason': f'Error loading login page: {e}'})
+            return
+
         elif parsed_path.path == '/download':
             query = urllib.parse.parse_qs(parsed_path.query)
             self.handle_download_request(query)
+
+        elif parsed_path.path == '/yt-qualities':
+            query = urllib.parse.parse_qs(parsed_path.query)
+            url = query.get('url', [''])[0]
+            if not url or ('youtube.com' not in url and 'youtu.be' not in url):
+                self.send_json_response(400, {'ok': False, 'reason': 'Invalid YouTube URL'})
+                return
+            try:
+
+                result = subprocess.run(
+                    ['yt-dlp', '--no-warnings', '--skip-download', '-j', url],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=True
+                )
+                info = json.loads(result.stdout)
+
+
+                qualities: List[Dict[str, Any]] = []
+                for fmt in info.get('formats', []):
+                    fmt_id = fmt.get('format_id')
+                    height = fmt.get('height')
+                    note = fmt.get('format_note') or (f"{height}p" if height else '')
+                    ext = fmt.get('ext', '')
+                    size = fmt.get('filesize_approx') or 0
+
+
+                    if ext == 'mhtml' or 'storyboard' in (note or '').lower():
+                        continue
+
+
+                    if height:
+                        if note:
+                            label = f"{note} ({ext})"
+                        else:
+                            label = f"{height}p ({ext})"
+                        if size:
+                            label += f" ~{size//1024//1024}MB"
+                        qualities.append({'format_id': fmt_id, 'label': label})
+
+                self.send_json_response(200, {'ok': True, 'qualities': qualities})
+
+            except Exception as e:
+                self.send_json_response(500, {'ok': False, 'reason': str(e)})
+
         else:
-            self.send_json_response(404, {'ok': False, 'reason': f"Unbekannte Anfrage: {self.command} {self.path}"})
+            self.send_json_response(
+                404,
+                {'ok': False, 'reason': f"Unbekannte Anfrage: {self.command} {self.path}"}
+            )
 
 def get_yt_dlp_version() -> str:
     result = subprocess.run(['yt-dlp', '--version'], capture_output=True, text=True)
