@@ -21,19 +21,32 @@
         placeholder="Enter YouTube or X (Twitter) link..."
         required
       />
-      <select id="formatSelect">
-        <option value="mp4">🎬 Video (.mp4)</option>
-        <option value="mp3">🎵 Audio (.mp3)</option>
-      </select>
       <button type="button" id="qualityBtn" style="display:none;">Select Quality</button>
       <select id="qualitySelect" style="display:none;"></select>
+      <div id="formatSelectWrapper" style="display:none; position: relative;">
+        <select id="formatSelect" style="display:none;">
+          <option value="mp4">🎬 Video (.mp4)</option>
+          <option value="mp3">🎵 Audio (.mp3)</option>
+        </select>
+        <div id="customFormatSelect" class="custom-select">
+          <div class="custom-select-selected" id="customFormatDisplay">🎬 Video (.mp4)</div>
+          <div class="custom-select-options" id="customFormatOptions">
+            <div class="custom-select-option" data-value="mp4">🎬 Video (.mp4)</div>
+            <div class="custom-select-option" data-value="mp3">🎵 Audio (.mp3)</div>
+          </div>
+        </div>
+      </div>
       <button type="submit" id="mainActionBtn">Search</button>
     </form>
+    <div id="statusBox" style="display:none; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 5px; border: 1px solid rgba(255,255,255,0.1); text-align: center;">
+      <p id="statusText" style="margin: 0; color: #fff;"></p>
+    </div>
     <p id="result"></p>
   </div>
 
   <div class="developer-link">
-    Developer: <a href="https://github.com/Gerald-Ha?tab=repositories" target="_blank" rel="noopener noreferrer">Gerald-Ha</a>
+    Developer: <a href="https://github.com/Gerald-Ha?tab=repositories" target="_blank" rel="noopener noreferrer">Gerald-Ha</a><br>
+    Version: 3.0.1
   </div>
 
   <div id="qualityModal" class="modal">
@@ -55,11 +68,40 @@
     const closeModal = document.querySelector('.close');
     const logoutBtn = document.getElementById('logoutBtn');
     const mainActionBtn = document.getElementById('mainActionBtn');
+    const statusBox = document.getElementById('statusBox');
+    const statusText = document.getElementById('statusText');
+    
+    function updateStatus(message) {
+      if (message) {
+        statusText.textContent = message;
+        statusBox.style.display = 'block';
+      } else {
+        statusBox.style.display = 'none';
+      }
+    }
     let lastQualities = [];
     let selectedQuality = '';
     let lastUrl = '';
     let qualitiesLoaded = false;
     let searchClicked = false;
+    let cacheResetTimeout = null;
+    let downloadInProgress = false;
+    
+    function startCacheResetTimer() {
+      if (cacheResetTimeout) {
+        clearTimeout(cacheResetTimeout);
+        cacheResetTimeout = null;
+      }
+      
+      if (!downloadInProgress && lastUrl) {
+        cacheResetTimeout = setTimeout(() => {
+          if (!downloadInProgress && lastUrl) {
+            fetch(`/cache-reset?url=${encodeURIComponent(lastUrl)}`).catch(() => {});
+            resetUIForNewUrl();
+          }
+        }, 300000);
+      }
+    }
 
     function resetUIForNewUrl() {
       qualitiesLoaded = false;
@@ -68,10 +110,27 @@
       qualityBtn.style.display = 'none';
       qualityBtn.textContent = 'Select Quality';
       qualitySelect.style.display = 'none';
+      formatSelect.style.display = 'none';
+      if (formatSelectWrapper) {
+        formatSelectWrapper.style.display = 'none';
+        customFormatOptions.classList.remove('show');
+      }
+      mainActionBtn.style.display = '';
       mainActionBtn.textContent = 'Search';
       mainActionBtn.disabled = false;
       result.textContent = '';
       searchClicked = false;
+      downloadInProgress = false;
+      updateStatus('');
+      
+      if (lastUrl) {
+        fetch(`/cache-reset?url=${encodeURIComponent(lastUrl)}`).catch(() => {});
+      }
+      
+      if (cacheResetTimeout) {
+        clearTimeout(cacheResetTimeout);
+        cacheResetTimeout = null;
+      }
     }
 
     function showLogoutIfLoggedIn() {
@@ -83,10 +142,17 @@
     }
 
     async function fetchYouTubeQualities(url) {
-      result.textContent = '🔎 Checking available qualities...';
+      result.textContent = '';
+      updateStatus('🔎 Checking available qualities...');
       mainActionBtn.disabled = true;
       try {
         const res = await fetch(`/yt-qualities?url=${encodeURIComponent(url)}`);
+        
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw { response: res, errorData: errorData };
+        }
+        
         const data = await res.json();
         if (data.ok && data.qualities && data.qualities.length > 0) {
           lastQualities = data.qualities;
@@ -101,30 +167,51 @@
               selectedQuality = q.format_id;
               qualityBtn.textContent = q.label;
               qualityModal.style.display = 'none';
+              formatSelect.style.display = 'none';
+              formatSelectWrapper.style.display = '';
+              formatSelect.disabled = false;
+              mainActionBtn.style.display = '';
+              mainActionBtn.textContent = 'Start Download';
               mainActionBtn.disabled = false;
-              result.textContent = '';
+              result.textContent = 'Quality selected. Choose format and click "Start Download".';
             };
             qualityList.appendChild(li);
           });
           qualityBtn.style.display = '';
           qualityBtn.textContent = 'Select Quality';
           qualitySelect.style.display = 'none';
-          mainActionBtn.textContent = 'Start Download';
+          formatSelect.style.display = 'none';
+          formatSelectWrapper.style.display = 'none';
+          mainActionBtn.style.display = 'none';
           mainActionBtn.disabled = false;
           result.textContent = '';
         } else {
           qualityBtn.style.display = 'none';
           qualitySelect.style.display = 'none';
+          formatSelect.style.display = 'none';
+          formatSelectWrapper.style.display = 'none';
+          mainActionBtn.style.display = '';
           mainActionBtn.textContent = 'Search';
           mainActionBtn.disabled = false;
-          result.textContent = 'No qualities found.';
+          result.textContent = '';
+          updateStatus('No qualities found.');
         }
       } catch (e) {
         qualityBtn.style.display = 'none';
         qualitySelect.style.display = 'none';
+        formatSelect.style.display = 'none';
+        formatSelectWrapper.style.display = 'none';
+        mainActionBtn.style.display = '';
         mainActionBtn.textContent = 'Search';
         mainActionBtn.disabled = false;
-        result.textContent = 'Could not fetch qualities.';
+        
+        let errorMessage = 'Could not fetch qualities.';
+        if (e.errorData && e.errorData.reason) {
+          errorMessage = e.errorData.reason;
+        }
+        
+        result.textContent = '';
+        updateStatus(errorMessage);
       }
     }
 
@@ -132,11 +219,13 @@
       const url = urlInput.value.trim();
       const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
       const isX = url.includes('twitter.com') || url.includes('x.com');
-      if (url !== lastUrl) {
+      if (url !== lastUrl || url === '') {
         resetUIForNewUrl();
         lastUrl = url;
       }
       if (isYouTube) {
+        formatSelect.style.display = 'none';
+        formatSelectWrapper.style.display = 'none';
         formatSelect.disabled = false;
         qualityBtn.style.display = 'none';
         qualitySelect.style.display = 'none';
@@ -161,12 +250,66 @@
       }
     }
 
-    urlInput.addEventListener('input', () => {
+    urlInput.addEventListener('input', (e) => {
+      const currentUrl = e.target.value.trim();
+      
+      if (currentUrl !== lastUrl) {
+        resetUIForNewUrl();
+        lastUrl = currentUrl;
+      }
+      
       updateQualityOptions();
       result.textContent = '';
       mainActionBtn.disabled = false;
     });
+    
+    urlInput.addEventListener('focus', () => {
+    });
+    
+    urlInput.addEventListener('blur', () => {
+      const currentUrl = urlInput.value.trim();
+      if (currentUrl !== lastUrl && currentUrl !== '') {
+        resetUIForNewUrl();
+        lastUrl = currentUrl;
+      }
+    });
 
+    // Custom Dropdown Event-Handler
+    if (customFormatDisplay && customFormatOptions) {
+      customFormatDisplay.onclick = function() {
+        customFormatOptions.classList.toggle('show');
+      };
+      
+      const originalWindowClick = window.onclick;
+      window.onclick = function(event) {
+        if (originalWindowClick) originalWindowClick(event);
+        if (event.target == qualityModal) {
+          qualityModal.style.display = 'none';
+        }
+        if (!event.target.matches('.custom-select-selected') && !event.target.matches('.custom-select-option') && !event.target.closest('.custom-select')) {
+          customFormatOptions.classList.remove('show');
+        }
+      };
+      
+      const formatOptions = customFormatOptions.querySelectorAll('.custom-select-option');
+      formatOptions.forEach(option => {
+        option.onclick = function() {
+          const value = this.getAttribute('data-value');
+          formatSelect.value = value;
+          
+          formatOptions.forEach(opt => opt.classList.remove('selected'));
+          this.classList.add('selected');
+          customFormatDisplay.textContent = this.textContent;
+          
+          customFormatOptions.classList.remove('show');
+        };
+      });
+      
+      if (formatOptions.length > 0) {
+        formatOptions[0].classList.add('selected');
+      }
+    }
+    
     qualityBtn.onclick = function() {
       if (lastQualities.length > 0) {
         qualityModal.style.display = 'flex';
@@ -198,47 +341,95 @@
         result.textContent = 'Please enter a valid URL.';
         return;
       }
-      if (isYouTube && !searchClicked) {
-        searchClicked = true;
-        await fetchYouTubeQualities(url);
+      
+      if (isYouTube) {
+        if (mainActionBtn.textContent === 'Search') {
+          if (url !== lastUrl) {
+            resetUIForNewUrl();
+            lastUrl = url;
+          }
+          searchClicked = true;
+          await fetchYouTubeQualities(url);
+          return;
+        }
+        
+        if (url !== lastUrl) {
+          resetUIForNewUrl();
+          lastUrl = url;
+        }
+        
+        if (!qualitiesLoaded || !selectedQuality) {
+          searchClicked = true;
+          await fetchYouTubeQualities(url);
+          return;
+        }
+      }
+      if (isYouTube && qualitiesLoaded && !selectedQuality) {
+        result.textContent = 'Please select a quality first.';
+        mainActionBtn.disabled = false;
         return;
       }
-      if (isYouTube && qualitiesLoaded && !quality && lastQualities.length > 0) {
-        let best = lastQualities[0];
-        let bestSize = 0;
-        lastQualities.forEach(q => {
-          const sizeMatch = q.label.match(/~(\d+)MB/);
-          if (sizeMatch) {
-            const size = parseInt(sizeMatch[1]);
-            if (size > bestSize) {
-              best = q;
-              bestSize = size;
-            }
-          }
-        });
-        quality = best.format_id;
-        selectedQuality = quality;
-        qualityBtn.textContent = best.label;
+      if (isYouTube && selectedQuality) {
+        quality = selectedQuality;
       }
-      result.textContent = '⏳ Preparing download...';
+      if (cacheResetTimeout) {
+        clearTimeout(cacheResetTimeout);
+        cacheResetTimeout = null;
+      }
+      downloadInProgress = true;
+      
+      updateStatus('Starting download...');
+      result.textContent = '';
       mainActionBtn.disabled = true;
-      let query = `/download?url=${encodeURIComponent(url)}`;
+      
+      const sessionId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+      let query = `/download?url=${encodeURIComponent(url)}&session_id=${sessionId}`;
       if (!formatSelect.disabled) query += `&format=${format}`;
       if (isYouTube && quality) query += `&quality=${quality}`;
+      
+      let eventSource = null;
+      
       try {
+        eventSource = new EventSource(`/status?session_id=${sessionId}`);
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.status) {
+              updateStatus(data.status);
+            }
+          } catch (e) {
+          }
+        };
+        eventSource.onerror = (error) => {
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+        };
+        
         const res = await fetch(query, { method: 'GET' });
+        
         if (res.status === 200 && res.headers.get('Content-Type') && res.headers.get('Content-Type').includes('application/json')) {
           const data = await res.json();
           if (!data.ok) {
+            updateStatus('');
             result.textContent = 'Invalid or unsupported link.';
             mainActionBtn.disabled = false;
+            downloadInProgress = false;
             return;
           }
         } else if (res.status !== 200) {
-          result.textContent = 'Invalid or unsupported link.';
-          mainActionBtn.disabled = false;
-          return;
+          updateStatus('');
+            result.textContent = 'Invalid or unsupported link.';
+            mainActionBtn.disabled = false;
+            downloadInProgress = false;
+            startCacheResetTimer();
+            return;
         } else {
+          updateStatus('Preparing file...');
           const blob = await res.blob();
           const contentDisposition = res.headers.get('Content-Disposition');
           let filename = 'download';
@@ -254,12 +445,33 @@
           a.click();
           a.remove();
           window.URL.revokeObjectURL(urlBlob);
+          updateStatus('Download ready');
+          setTimeout(() => {
+            updateStatus('');
+          }, 2000);
           result.textContent = '';
           mainActionBtn.disabled = false;
+          downloadInProgress = false;
+          
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          
+          startCacheResetTimer();
         }
       } catch (err) {
+        updateStatus('');
         result.textContent = 'Invalid or unsupported link.';
         mainActionBtn.disabled = false;
+        downloadInProgress = false;
+        
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        
+        startCacheResetTimer();
       }
     });
 

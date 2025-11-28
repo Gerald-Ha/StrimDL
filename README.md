@@ -1,8 +1,6 @@
 # StrimDL
 
 <img src="https://github.com/user-attachments/assets/a5c797b8-5ea2-44d3-a2fd-1fd24dbfad43" width="600" height="auto">
-
-
 &nbsp;
 
 A simple, modern web interface to download media from **YouTube** and **X (formerly Twitter)** using [yt-dlp](https://github.com/yt-dlp/yt-dlp) and Python.
@@ -97,6 +95,9 @@ Supports direct downloads as:
 ---
 
 ## 📄 Change Log
+
+* **v3.0.1** – Switched audio download from CBR/ABR to VBR (Variable Bitrate), providing significantly better quality and bitrate as it always selects the best available quality during download. Improved UI with custom dropdown for format selection, real-time status updates via Server-Side Events (SSE), playlist link detection, and enhanced spacing between UI elements.
+YouTube downloads are working again after they stopped working following the update on the YouTube platform.
 
 * **v2.0.0** – Added login authentication, improved Docker support, updated UI and README.
 

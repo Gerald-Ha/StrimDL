@@ -33,6 +33,7 @@ body {
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
   max-width: 500px;
   width: 100%;
+  
 }
 
 h1 {
@@ -54,6 +55,19 @@ form {
   gap: 1rem;
 }
 
+#formatSelectWrapper {
+  margin-top: 1.25rem;
+}
+
+#statusBox {
+  margin-top: 2rem !important;
+  padding: 10px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.1);
+  text-align: center;
+}
+
 input[type="text"],
 select {
   padding: 0.75rem 1rem;
@@ -63,6 +77,36 @@ select {
   color: var(--text);
   font-size: 1rem;
   width: 100%;
+  text-align: center;
+  text-align-last: center;
+}
+
+select option {
+  text-align: center;
+  text-align-last: center;
+  padding: 0.5rem 1rem;
+  direction: ltr;
+  display: block;
+  width: 100%;
+}
+
+select {
+  text-align: center;
+  text-align-last: center;
+  direction: ltr;
+}
+
+select::-webkit-scrollbar {
+  width: 8px;
+}
+
+select::-webkit-scrollbar-track {
+  background: var(--input-bg);
+}
+
+select::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
 }
 
     input[type="password"],
@@ -74,6 +118,8 @@ select {
       color: var(--text);
       font-size: 1rem;
       width: 100%;
+	  text-align: center;
+	  text-align-last: center;
     }
 
 select:disabled {
@@ -176,4 +222,62 @@ button:hover {
     font-size: 0.95rem;
     padding: 0.3rem 0.7rem;
   }
+}
+
+.custom-select {
+  position: relative;
+  width: 100%;
+}
+
+.custom-select-selected {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 1rem;
+  cursor: pointer;
+  text-align: center;
+  user-select: none;
+}
+
+.custom-select-selected:hover {
+  background: #333;
+}
+
+.custom-select-options {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  margin-top: 0.25rem;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.custom-select-options.show {
+  display: block;
+}
+
+.custom-select-option {
+  padding: 0.75rem 1rem;
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.2s;
+}
+
+.custom-select-option:hover {
+  background: #333;
+}
+
+.custom-select-option.selected {
+  background: var(--accent);
+  color: #fff;
 } 
