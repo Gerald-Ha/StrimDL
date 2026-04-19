@@ -350,14 +350,14 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
     def send_status_update(self, session_id: str, status: str) -> None:
         """Sende Status-Update an SSE-Client"""
         with status_lock:
-                        if session_id in download_status:
+            if session_id in download_status:
                 download_status[session_id].put(status)
 
-                        if session_id not in status_buffer:
+            if session_id not in status_buffer:
                 status_buffer[session_id] = []
             status_buffer[session_id].append(status)
 
-                        if len(status_buffer[session_id]) > 10:
+            if len(status_buffer[session_id]) > 10:
                 status_buffer[session_id] = status_buffer[session_id][-10:]
     def get_status_queue(self, session_id: str) -> Queue:
         """Hole oder erstelle Status-Queue für Session"""
@@ -365,7 +365,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             if session_id not in download_status:
                 download_status[session_id] = Queue()
 
-                                if session_id in status_buffer:
+                if session_id in status_buffer:
                     for buffered_status in status_buffer[session_id]:
                         download_status[session_id].put(buffered_status)
 
@@ -553,7 +553,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
         """Lädt Video in gewählter Qualität herunter und cached es, gibt den Pfad zurück"""
         cache_path = self.get_cached_video_path(url, quality)
 
-                if cache_path.exists():
+        if cache_path.exists():
             logger.info(f"Using cached video: {cache_path}")
 
             if session_id:
@@ -562,11 +562,11 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             return cache_path
         logger.info(f"Downloading video to cache: {url}, quality: {quality}")
 
-                if quality:
-                        format_spec = f'{quality}+bestaudio/best'
+        if quality:
+            format_spec = f'{quality}+bestaudio/best'
         else:
-                        format_spec = 'bestvideo+bestaudio/best'
-                cmd = self.build_yt_dlp_cmd('-f', format_spec, '--merge-output-format', 'mp4', '-o', str(cache_path), url)
+            format_spec = 'bestvideo+bestaudio/best'
+        cmd = self.build_yt_dlp_cmd('-f', format_spec, '--merge-output-format', 'mp4', '-o', str(cache_path), url)
 
         logger.info(f"Running: {' '.join(cmd)}")
 
@@ -605,12 +605,12 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
         try:
             if output_format == 'mp3':
-                                                                                                logger.info(f"Converting to MP3 with best quality: {cache_path}")
+                logger.info(f"Converting to MP3 with best quality: {cache_path}")
 
                 if session_id:
                     self.send_status_update(session_id, "Start converting...")
 
-                                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3', dir=str(CACHE_DIR)) as tmp_file:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3', dir=str(CACHE_DIR)) as tmp_file:
                     tmp_path = Path(tmp_file.name)
 
                 try:
@@ -618,18 +618,18 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                         'ffmpeg', '-i', str(cache_path),
                         '-codec:a', 'libmp3lame', '-q:a', '0', '-write_xing', '1',
                         '-ar', '44100', '-ac', '2', '-id3v2_version', '3',
-                        '-y',                          str(tmp_path)
+                        '-y', str(tmp_path)
 
                     ]
                     result = self.run_managed_command(cmd, session_id=session_id, timeout=1800)
 
                     if result.returncode == 0 and tmp_path.exists():
-                                                with open(tmp_path, 'rb') as f:
+                        with open(tmp_path, 'rb') as f:
                             output_data = f.read()
 
                         logger.info(f"MP3 conversion successful, size: {len(output_data)} bytes")
 
-                                                tmp_path.unlink()
+                        tmp_path.unlink()
 
                         return output_data
                     else:
@@ -653,12 +653,12 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
                     return None
             else:
-                                                logger.info(f"Converting video with quality: {quality}")
+                logger.info(f"Converting video with quality: {quality}")
 
                 if session_id:
                     self.send_status_update(session_id, "Start converting...")
 
-                                probe_cmd = ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_streams', str(cache_path)]
+                probe_cmd = ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_streams', str(cache_path)]
                 probe_result = subprocess.run(probe_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
                 needs_recode = False
@@ -679,25 +679,25 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                                 logger.info(f"Non-H.264 codec detected ({codec}), re-encoding to H.264")
 
                                 if quality and url:
-                    try:
-                        result = subprocess.run(
-                            self.build_yt_dlp_cmd('--no-warnings', '--skip-download', '-j', '-f', quality, url),
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            text=True,
-                            timeout=10
-                        )
+                                    try:
+                                        result = subprocess.run(
+                                            self.build_yt_dlp_cmd('--no-warnings', '--skip-download', '-j', '-f', quality, url),
+                                            stdout=subprocess.PIPE,
+                                            stderr=subprocess.PIPE,
+                                            text=True,
+                                            timeout=10
+                                        )
 
-                        if result.returncode == 0:
-                            fmt_info = json.loads(result.stdout)
+                                        if result.returncode == 0:
+                                            fmt_info = json.loads(result.stdout)
 
-                            target_height = fmt_info.get('height')
+                                            target_height = fmt_info.get('height')
 
-                            if target_height:
-                                logger.info(f"Target height from quality: {target_height}p")
+                                            if target_height:
+                                                logger.info(f"Target height from quality: {target_height}p")
 
-                    except Exception as e:
-                        logger.warning(f"Could not get quality info: {e}")
+                                    except Exception as e:
+                                        logger.warning(f"Could not get quality info: {e}")
 
                 if target_height and FFMPEG_MAX_HEIGHT and target_height > FFMPEG_MAX_HEIGHT:
                     logger.info(f"Limiting target height from {target_height}p to {FFMPEG_MAX_HEIGHT}p via FFMPEG_MAX_HEIGHT")
@@ -705,36 +705,36 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                     target_height = FFMPEG_MAX_HEIGHT
                 if target_height and (source_height is None or target_height != source_height):
                     needs_recode = True
-                                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4', dir=str(CACHE_DIR)) as tmp_file:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4', dir=str(CACHE_DIR)) as tmp_file:
                     tmp_path = Path(tmp_file.name)
 
                 try:
                     if needs_recode:
-                                                cmd = ['ffmpeg', '-i', str(cache_path)]
-                                                if target_height and (source_height is None or target_height != source_height):
+                        cmd = ['ffmpeg', '-i', str(cache_path)]
+                        if target_height and (source_height is None or target_height != source_height):
                             cmd.extend(['-vf', f'scale=-2:{target_height}'])
 
                         cmd.extend([
                             '-c:v', 'libx264', '-preset', FFMPEG_VIDEO_PRESET, '-crf', FFMPEG_VIDEO_CRF,
                             '-c:a', 'aac', '-b:a', '128k',
-                            '-movflags', '+faststart',                              '-pix_fmt', 'yuv420p',
-                            '-y',                              str(tmp_path)
+                            '-movflags', '+faststart', '-pix_fmt', 'yuv420p',
+                            '-y', str(tmp_path)
 
                         ])
 
                     else:
-                                                cmd = ['ffmpeg', '-i', str(cache_path), '-c', 'copy', '-movflags', '+faststart', '-y', str(tmp_path)]
+                        cmd = ['ffmpeg', '-i', str(cache_path), '-c', 'copy', '-movflags', '+faststart', '-y', str(tmp_path)]
                     logger.info(f"Running: {' '.join(cmd)}")
 
                     result = self.run_managed_command(cmd, session_id=session_id, timeout=1800)
 
                     if result.returncode == 0 and tmp_path.exists():
-                                                with open(tmp_path, 'rb') as f:
+                        with open(tmp_path, 'rb') as f:
                             output_data = f.read()
 
                         logger.info(f"Video conversion successful, size: {len(output_data)} bytes")
 
-                                                tmp_path.unlink()
+                        tmp_path.unlink()
 
                         return output_data
                     else:
@@ -776,15 +776,15 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
         quality = query.get('quality', [''])[0]
         logger.info(f"Download request: url={url}, format={format_param}, quality={quality}")
 
-                session_id = query.get('session_id', [''])[0]
+        session_id = query.get('session_id', [''])[0]
         if not session_id:
-                        session_id = hashlib.md5(f"{url}_{quality}_{format_param}_{time.time()}".encode()).hexdigest()
+            session_id = hashlib.md5(f"{url}_{quality}_{format_param}_{time.time()}".encode()).hexdigest()
 
         self.get_status_queue(session_id)          
 
-                self.send_status_update(session_id, "Starting download...")
+        self.send_status_update(session_id, "Starting download...")
 
-                if 'youtube.com' in url or 'youtu.be' in url:
+        if 'youtube.com' in url or 'youtu.be' in url:
             video_title = self.get_youtube_title(url, session_id)
 
             if self.is_session_cancelled(session_id):
@@ -813,7 +813,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
             utf8_filename = quote(filename)
 
-                        cache_path = self.download_and_cache_video(url, quality if quality else None, session_id)
+            cache_path = self.download_and_cache_video(url, quality if quality else None, session_id)
 
             if not cache_path:
                 if self.is_session_cancelled(session_id):
@@ -835,7 +835,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response(500, {'ok': False, 'reason': 'Failed to download video. Check logs for details.'})
 
                 return
-                        content_type = 'audio/mpeg' if format_param == 'mp3' else 'video/mp4'
+            content_type = 'audio/mpeg' if format_param == 'mp3' else 'video/mp4'
             output_data = self.convert_cached_video(cache_path, format_param, quality, url, session_id)
 
             if not output_data:
@@ -858,13 +858,14 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response(500, {'ok': False, 'reason': 'Video conversion failed. The video may be corrupted or the format is not supported. Check server logs for details.'})
 
                 return
-                        self.send_status_update(session_id, "Processing complete")
+            self.send_status_update(session_id, "Processing complete")
 
-            time.sleep(0.1)              self.cleanup_status_queue(session_id)
+            time.sleep(0.1)
+            self.cleanup_status_queue(session_id)
 
             self.cleanup_download_session(session_id)
 
-                        self.send_response(200)
+            self.send_response(200)
 
             self.send_header('Content-Type', content_type)
 
@@ -882,7 +883,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             logger.info(f"Successfully sent {format_param} file: {filename}")
 
             return
-                url_info = self.parse_twitter_url(url)
+        url_info = self.parse_twitter_url(url)
 
         if not url_info:
             self.cleanup_status_queue(session_id)
@@ -942,7 +943,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed_path = urllib.parse.urlparse(self.path)
 
-                if parsed_path.path.startswith('/css/') or parsed_path.path.startswith('/image/'):
+        if parsed_path.path.startswith('/css/') or parsed_path.path.startswith('/image/'):
             return super().do_GET()
 
         if parsed_path.path == '/':
@@ -982,7 +983,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response(400, {'ok': False, 'reason': 'Missing session_id'})
 
                 return
-                        self.send_response(200)
+            self.send_response(200)
 
             self.send_header('Content-Type', 'text/event-stream')
 
@@ -990,14 +991,15 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
             self.send_header('Connection', 'keep-alive')
 
-            self.send_header('X-Accel-Buffering', 'no')              self.end_headers()
+            self.send_header('X-Accel-Buffering', 'no')
+            self.end_headers()
 
             try:
                 status_queue = self.get_status_queue(session_id)
 
                 timeout_count = 0
                 max_timeout = 300                  
-                                try:
+                try:
                     self.wfile.write(b": connection established\n\n")
 
                     self.wfile.flush()
@@ -1008,22 +1010,22 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                     return
                 while timeout_count < max_timeout:
                     try:
-                                                status = status_queue.get(timeout=1)
+                        status = status_queue.get(timeout=1)
 
                         timeout_count = 0                          
-                                                try:
+                        try:
                             self.wfile.write(f"data: {json.dumps({'status': status})}\n\n".encode())
 
                             self.wfile.flush()
 
                         except (BrokenPipeError, OSError):
-                                                        logger.info("SSE client disconnected")
+                            logger.info("SSE client disconnected")
 
                             break
-                                                if status in ["Processing complete", "Download failed", "Download cancelled"]:
+                        if status in ["Processing complete", "Download failed", "Download cancelled"]:
                             break
                     except:
-                                                timeout_count += 1
+                        timeout_count += 1
                         try:
                             self.wfile.write(b": keepalive\n\n")
 
@@ -1037,7 +1039,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 logger.error(f"SSE error: {e}")
 
             finally:
-                                pass
+                pass
             return
         elif parsed_path.path == '/cache-reset':
             if not self.is_authenticated():
@@ -1073,7 +1075,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response(400, {'ok': False, 'reason': 'Invalid YouTube URL'})
 
                 return
-                        parsed_url = urllib.parse.urlparse(url)
+            parsed_url = urllib.parse.urlparse(url)
 
             query_params_url = urllib.parse.parse_qs(parsed_url.query)
 
