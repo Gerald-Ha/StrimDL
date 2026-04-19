@@ -16,6 +16,7 @@
 
 body {
   background: var(--bg);
+
   font-family: 'Inter', sans-serif;
   display: flex;
   align-items: center;
@@ -28,12 +29,13 @@ body {
 
 .card {
   background: var(--card);
+
   padding: 2rem;
   border-radius: 1rem;
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+
   max-width: 500px;
   width: 100%;
-  
 }
 
 h1 {
@@ -63,8 +65,10 @@ form {
   margin-top: 2rem !important;
   padding: 10px;
   background: rgba(0,0,0,0.3);
+
   border-radius: 5px;
   border: 1px solid rgba(255,255,255,0.1);
+
   text-align: center;
 }
 
@@ -73,8 +77,11 @@ select {
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
   border: 1px solid var(--border);
+
   background: var(--input-bg);
+
   color: var(--text);
+
   font-size: 1rem;
   width: 100%;
   text-align: center;
@@ -106,6 +113,7 @@ select::-webkit-scrollbar-track {
 
 select::-webkit-scrollbar-thumb {
   background: var(--border);
+
   border-radius: 4px;
 }
 
@@ -114,8 +122,11 @@ select::-webkit-scrollbar-thumb {
       padding: 0.75rem 1rem;
       border-radius: 0.5rem;
       border: 1px solid var(--border);
+
       background: var(--input-bg);
+
       color: var(--text);
+
       font-size: 1rem;
       width: 100%;
 	  text-align: center;
@@ -129,6 +140,7 @@ select:disabled {
 
 button {
   background: var(--accent);
+
   color: #fff;
   border: none;
   padding: 0.75rem;
@@ -142,27 +154,98 @@ button:hover {
   background: #009dd6;
 }
 
+button.cancel-button {
+  background: #d93025;
+}
+
+button.cancel-button:hover {
+  background: #b3261e;
+}
+
+button.cancel-button:disabled {
+  background: #7f1d1d;
+  cursor: wait;
+}
+
+#qualityBtn.quality-attention {
+  background: #d93025;
+}
+
+#qualityBtn.quality-attention:hover {
+  background: #b3261e;
+}
+
 #result {
   margin-top: 1rem;
   font-weight: 600;
   color: var(--muted);
+
   text-align: center;
+}
+
+.activity-indicator {
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+  color: #d7d7d7;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.activity-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+
+  border-top-color: var(--accent);
+
+  border-radius: 50%;
+  animation: activity-spin 0.8s linear infinite;
+}
+
+@keyframes activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .developer-link {
   margin-top: 1rem;
   font-size: 0.9rem;
   color: var(--muted);
+
   text-align: center;
 }
 
 .developer-link a {
   color: var(--accent);
+
   text-decoration: none;
 }
 
 .developer-link a:hover {
   text-decoration: underline;
+}
+
+.update-footer-link {
+  margin-top: 0.25rem;
+  padding: 0;
+  background: transparent;
+  color: #ff6b6b;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.update-footer-link:hover {
+  background: transparent;
+  color: #ff8a80;
+}
+
+.update-footer-link.critical {
+  color: #ff4d4d;
 }
 
 @media (max-width: 600px) {
@@ -178,17 +261,73 @@ button:hover {
   z-index: 1000;
   left: 0; top: 0; width: 100vw; height: 100vh;
   background: rgba(0,0,0,0.7);
+
   justify-content: center; align-items: center;
 }
+
 .modal-content {
   background: #222; color: #fff; border-radius: 10px;
   padding: 20px; max-height: 80vh; width: 90vw; max-width: 400px;
   overflow-y: auto;
   margin: auto;
 }
+
 .close {
   float: right; font-size: 28px; cursor: pointer;
 }
+
+.update-modal {
+  z-index: 1200;
+}
+
+.update-modal-content {
+  text-align: center;
+  line-height: 1.45;
+}
+
+.update-modal-content strong,
+.update-modal-content span {
+  display: block;
+}
+
+.update-modal-content strong {
+  margin: 0.4rem 0 0.5rem;
+  font-size: 1.2rem;
+  color: #ffffff;
+}
+
+.update-modal-content span {
+  color: #d7d7d7;
+}
+
+.update-modal-content a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1rem;
+  padding: 0.6rem 1.1rem;
+  min-width: 130px;
+  border-radius: 0.5rem;
+  background: var(--accent);
+
+  color: #ffffff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.update-modal-content a:hover {
+  background: #009dd6;
+  text-decoration: none;
+}
+
+.update-modal.critical .update-modal-content a {
+  background: #d93025;
+}
+
+.update-modal.critical .update-modal-content a:hover {
+  background: #b3261e;
+}
+
 @media (max-width: 600px) {
   .modal-content { width: 98vw; max-width: none; }
 }
@@ -204,15 +343,21 @@ button:hover {
   font-size: 1rem;
   border-radius: 0.5rem;
   background: var(--card);
+
   color: var(--text);
+
   border: 1px solid var(--border);
+
   cursor: pointer;
   transition: background 0.2s;
 }
+
 #logoutBtn:hover {
   background: var(--accent);
+
   color: #fff;
 }
+
 @media (max-width: 600px) {
   #logoutBtn {
     top: 0.5rem;
@@ -233,8 +378,11 @@ button:hover {
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
   border: 1px solid var(--border);
+
   background: var(--input-bg);
+
   color: var(--text);
+
   font-size: 1rem;
   cursor: pointer;
   text-align: center;
@@ -253,7 +401,9 @@ button:hover {
   right: 0;
   z-index: 1000;
   background: var(--input-bg);
+
   border: 1px solid var(--border);
+
   border-radius: 0.5rem;
   margin-top: 0.25rem;
   max-height: 200px;
@@ -268,6 +418,7 @@ button:hover {
 .custom-select-option {
   padding: 0.75rem 1rem;
   color: var(--text);
+
   cursor: pointer;
   text-align: center;
   transition: background 0.2s;
@@ -279,5 +430,6 @@ button:hover {
 
 .custom-select-option.selected {
   background: var(--accent);
+
   color: #fff;
-} 
+}

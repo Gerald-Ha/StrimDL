@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   strimdl:
     build: .
@@ -14,7 +12,14 @@ services:
       - IMAGE_NAMING_PATTERN=${IMAGE_NAMING_PATTERN}
       - STRIMDL_USER=${STRIMDL_USER}
       - STRIMDL_PASS=${STRIMDL_PASS}
+      - YTDLP_COOKIES_PATH=${YTDLP_COOKIES_PATH:-}
+      - YTDLP_UPDATE_ON_START=${YTDLP_UPDATE_ON_START:-true}
+      - STRIMDL_UPDATE_DEVMODE=${STRIMDL_UPDATE_DEVMODE:-false}
+      - STRIMDL_UPDATE_SERVER_URL=${STRIMDL_UPDATE_SERVER_URL:-https://update.gerald-hasani.com}
+      - FFMPEG_VIDEO_PRESET=${FFMPEG_VIDEO_PRESET:-veryfast}
+      - FFMPEG_VIDEO_CRF=${FFMPEG_VIDEO_CRF:-24}
+      - FFMPEG_MAX_HEIGHT=${FFMPEG_MAX_HEIGHT:-1440}
     volumes:
       - "${DOWNLOAD_PATH}:/download"
+      - "${YTDLP_COOKIES_DIR:-./cookies}:/cookies:ro"
     command: /app/server.py
-

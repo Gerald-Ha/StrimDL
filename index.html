@@ -4,14 +4,11 @@
   <meta charset="UTF-8">
   <title>StrimDL - YouTube & X Downloader</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
   <link rel="stylesheet" href="css/style.css" id="classicTheme" />
-  
   <link rel="icon" type="image/png" href="image/logo-s.png" />
 </head>
 <body>
   <button id="logoutBtn">Logout</button>
-  
   <div class="card">
     <h1><img src="image/logo-s.png" alt="Logo" class="logo-inline"> StrimDL - YouTube & X Downloader</h1>
     <form id="downloadForm">
@@ -40,37 +37,75 @@
     </form>
     <div id="statusBox" style="display:none; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 5px; border: 1px solid rgba(255,255,255,0.1); text-align: center;">
       <p id="statusText" style="margin: 0; color: #fff;"></p>
+      <div id="activityIndicator" class="activity-indicator" style="display:none;">
+        <span class="activity-spinner" aria-hidden="true"></span>
+        <span id="activityTimerText">Working 0:00</span>
+      </div>
     </div>
     <p id="result"></p>
   </div>
-
   <div class="developer-link">
     Developer: <a href="https://github.com/Gerald-Ha?tab=repositories" target="_blank" rel="noopener noreferrer">Gerald-Ha</a><br>
-    Version: 3.0.1
+    Version: {{APP_VERSION}}<br>
+    <button type="button" id="updateFooterLink" class="update-footer-link" style="display:none;">Update available</button>
   </div>
-
   <div id="qualityModal" class="modal">
     <div class="modal-content">
       <span class="close">&times;</span>
       <ul id="qualityList"></ul>
     </div>
   </div>
-
+  <div id="updateModal" class="modal update-modal">
+    <div class="modal-content update-modal-content">
+      <span class="close" id="updateModalClose">&times;</span>
+      <strong id="updateNoticeTitle"></strong>
+      <span id="updateNoticeText"></span>
+      <a id="updateNoticeLink" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Get update</a>
+    </div>
+  </div>
   <script>
     const downloadForm = document.getElementById('downloadForm');
+
     const result = document.getElementById('result');
+
     const urlInput = document.getElementById('urlInput');
+
     const formatSelect = document.getElementById('formatSelect');
+
     const qualitySelect = document.getElementById('qualitySelect');
+
     const qualityBtn = document.getElementById('qualityBtn');
+
     const qualityModal = document.getElementById('qualityModal');
+
     const qualityList = document.getElementById('qualityList');
-    const closeModal = document.querySelector('.close');
+
+    const closeModal = document.querySelector('#qualityModal .close');
+
     const logoutBtn = document.getElementById('logoutBtn');
+
     const mainActionBtn = document.getElementById('mainActionBtn');
+
     const statusBox = document.getElementById('statusBox');
+
     const statusText = document.getElementById('statusText');
-    
+
+    const activityIndicator = document.getElementById('activityIndicator');
+
+    const activityTimerText = document.getElementById('activityTimerText');
+
+    const updateFooterLink = document.getElementById('updateFooterLink');
+
+    const updateModal = document.getElementById('updateModal');
+
+    const updateModalClose = document.getElementById('updateModalClose');
+
+    const updateNoticeTitle = document.getElementById('updateNoticeTitle');
+
+    const updateNoticeText = document.getElementById('updateNoticeText');
+
+    const updateNoticeLink = document.getElementById('updateNoticeLink');
+
     function updateStatus(message) {
       if (message) {
         statusText.textContent = message;
@@ -79,6 +114,7 @@
         statusBox.style.display = 'none';
       }
     }
+
     let lastQualities = [];
     let selectedQuality = '';
     let lastUrl = '';
@@ -86,49 +122,260 @@
     let searchClicked = false;
     let cacheResetTimeout = null;
     let downloadInProgress = false;
-    
+    let updateCheckTimer = null;
+    let activeSessionId = '';
+    let activeEventSource = null;
+    let activeAbortController = null;
+    let cancelRequested = false;
+    let activityTimer = null;
+    let activityStartedAt = 0;
+    function setQualityAttention(active) {
+      qualityBtn.classList.toggle('quality-attention', active);
+    }
+
+    function setMainButtonSearchState() {
+      mainActionBtn.style.display = '';
+      mainActionBtn.textContent = 'Search';
+      mainActionBtn.disabled = false;
+      mainActionBtn.classList.remove('cancel-button');
+
+      setQualityAttention(false);
+    }
+
+    function formatElapsed(seconds) {
+      const mins = Math.floor(seconds / 60);
+
+      const secs = seconds % 60;
+      return `${mins}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function refreshActivityTimer() {
+      const elapsed = Math.max(0, Math.floor((Date.now() - activityStartedAt) / 1000));
+
+      activityTimerText.textContent = `Working ${formatElapsed(elapsed)}`;
+    }
+
+    function startActivityIndicator() {
+      activityStartedAt = Date.now();
+
+      refreshActivityTimer();
+
+      activityIndicator.style.display = 'inline-flex';
+      statusBox.style.display = 'block';
+      if (activityTimer) {
+        clearInterval(activityTimer);
+      }
+
+      activityTimer = setInterval(refreshActivityTimer, 1000);
+    }
+
+    function stopActivityIndicator() {
+      if (activityTimer) {
+        clearInterval(activityTimer);
+
+        activityTimer = null;
+      }
+
+      activityIndicator.style.display = 'none';
+    }
+
+    function getIdleMainButtonText() {
+      const url = urlInput.value.trim();
+
+      const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
+
+      if (isYouTube && (!qualitiesLoaded || !selectedQuality)) {
+        return 'Search';
+      }
+
+      return 'Start Download';
+    }
+
+    function setDownloadButtonRunning(active) {
+      mainActionBtn.style.display = '';
+      if (active) {
+        mainActionBtn.textContent = 'Cancel';
+        mainActionBtn.disabled = false;
+        mainActionBtn.classList.add('cancel-button');
+
+        startActivityIndicator();
+      } else {
+        mainActionBtn.textContent = getIdleMainButtonText();
+
+        mainActionBtn.disabled = false;
+        mainActionBtn.classList.remove('cancel-button');
+
+        stopActivityIndicator();
+      }
+    }
+
+    function closeActiveEventSource() {
+      if (activeEventSource) {
+        activeEventSource.close();
+
+        activeEventSource = null;
+      }
+    }
+
+    function finishDownloadState() {
+      downloadInProgress = false;
+      activeSessionId = '';
+      activeAbortController = null;
+      closeActiveEventSource();
+
+      setDownloadButtonRunning(false);
+    }
+
+    async function cancelActiveDownload() {
+      if (!activeSessionId || cancelRequested) {
+        return;
+      }
+
+      cancelRequested = true;
+      mainActionBtn.textContent = 'Cancelling...';
+      mainActionBtn.disabled = true;
+      updateStatus('Cancelling download...');
+
+      let cancelSent = false;
+      try {
+        const response = await fetch('/cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: activeSessionId })
+        });
+
+        cancelSent = response.ok;
+      } catch (e) {
+        // Fall back to aborting the browser request if the cancel endpoint is unavailable.
+      }
+
+      if (!cancelSent && activeAbortController) {
+        activeAbortController.abort();
+      }
+    }
+
+    function scheduleNextUpdateCheck(seconds) {
+      if (updateCheckTimer) {
+        clearTimeout(updateCheckTimer);
+
+        updateCheckTimer = null;
+      }
+
+      const delay = Math.max(60, Number(seconds) || 86400) * 1000;
+      updateCheckTimer = setTimeout(() => checkForStrimDLUpdate(false), delay);
+    }
+
+    function showUpdateNotice(data) {
+      const update = data.update || {};
+
+      const latest = update.latest_version || 'new version';
+      const current = data.current_version || 'installed version';
+      const link = update.update_link || update.notes_url || '';
+      const isBlocked = data.status === 'blocked';
+      updateModal.classList.toggle('critical', Boolean(update.critical) || isBlocked);
+
+      updateFooterLink.classList.toggle('critical', Boolean(update.critical) || isBlocked);
+
+      updateNoticeTitle.textContent = isBlocked ? 'Update required' : 'Update available';
+      updateNoticeText.textContent = `StrimDL ${latest} is available. Installed version: ${current}.`;
+      if (link) {
+        updateNoticeLink.href = link;
+        updateNoticeLink.style.display = 'inline-flex';
+      } else {
+        updateNoticeLink.style.display = 'none';
+      }
+
+      updateFooterLink.style.display = 'inline';
+    }
+
+    function hideUpdateNotice() {
+      updateFooterLink.style.display = 'none';
+      updateFooterLink.classList.remove('critical');
+
+      updateModal.style.display = 'none';
+      updateModal.classList.remove('critical');
+    }
+
+    async function checkForStrimDLUpdate(force = false) {
+      try {
+        const res = await fetch(`/app-update${force ? '?force=1' : ''}`);
+
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (data.status === 'update_available' || data.status === 'blocked') {
+          showUpdateNotice(data);
+        } else {
+          hideUpdateNotice();
+        }
+
+        scheduleNextUpdateCheck(data.next_check_seconds || data.check_interval_seconds);
+      } catch (e) {
+        scheduleNextUpdateCheck(3600);
+      }
+    }
+
     function startCacheResetTimer() {
+      // Stoppe existierenden Timer
       if (cacheResetTimeout) {
         clearTimeout(cacheResetTimeout);
+
         cacheResetTimeout = null;
       }
-      
+
+      // Starte Timer nur wenn kein Download aktiv ist
       if (!downloadInProgress && lastUrl) {
         cacheResetTimeout = setTimeout(() => {
           if (!downloadInProgress && lastUrl) {
             fetch(`/cache-reset?url=${encodeURIComponent(lastUrl)}`).catch(() => {});
+
             resetUIForNewUrl();
           }
-        }, 300000);
+        }, 300000); // 5 Minuten
       }
     }
 
     function resetUIForNewUrl() {
+      if (downloadInProgress) {
+        return;
+      }
+
+      closeActiveEventSource();
+
+      stopActivityIndicator();
+
+      activeSessionId = '';
+      activeAbortController = null;
+      cancelRequested = false;
       qualitiesLoaded = false;
       selectedQuality = '';
       lastQualities = [];
       qualityBtn.style.display = 'none';
       qualityBtn.textContent = 'Select Quality';
+      setQualityAttention(false);
+
       qualitySelect.style.display = 'none';
       formatSelect.style.display = 'none';
       if (formatSelectWrapper) {
         formatSelectWrapper.style.display = 'none';
         customFormatOptions.classList.remove('show');
       }
-      mainActionBtn.style.display = '';
-      mainActionBtn.textContent = 'Search';
-      mainActionBtn.disabled = false;
+
+      setMainButtonSearchState();
+
       result.textContent = '';
       searchClicked = false;
-      downloadInProgress = false;
-      updateStatus('');
-      
+      downloadInProgress = false; // Reset Download-Status
+      updateStatus(''); // Verstecke Status-Box
+      // Reset Cache beim neuen Link - lösche Cache-Dateien
       if (lastUrl) {
         fetch(`/cache-reset?url=${encodeURIComponent(lastUrl)}`).catch(() => {});
       }
-      
+
+      // Clear existing timeout
       if (cacheResetTimeout) {
         clearTimeout(cacheResetTimeout);
+
         cacheResetTimeout = null;
       }
     }
@@ -144,55 +391,75 @@
     async function fetchYouTubeQualities(url) {
       result.textContent = '';
       updateStatus('🔎 Checking available qualities...');
+
       mainActionBtn.disabled = true;
       try {
         const res = await fetch(`/yt-qualities?url=${encodeURIComponent(url)}`);
-        
+
+        // Prüfe ob Response einen Fehler enthält
         if (!res.ok) {
           const errorData = await res.json();
+
           throw { response: res, errorData: errorData };
         }
-        
+
         const data = await res.json();
+
         if (data.ok && data.qualities && data.qualities.length > 0) {
           lastQualities = data.qualities;
           qualitiesLoaded = true;
           qualityList.innerHTML = '';
           data.qualities.forEach(q => {
             const li = document.createElement('li');
+
             li.textContent = q.label;
             li.style.cursor = 'pointer';
             li.style.padding = '8px 0';
             li.onclick = () => {
               selectedQuality = q.format_id;
               qualityBtn.textContent = q.label;
+              setQualityAttention(false);
+
               qualityModal.style.display = 'none';
+              // Zeige Format-Auswahl und Download-Button nach Quality-Auswahl
               formatSelect.style.display = 'none';
               formatSelectWrapper.style.display = '';
               formatSelect.disabled = false;
-              mainActionBtn.style.display = '';
+              mainActionBtn.style.display = ''; // Zeige mainActionBtn wieder
               mainActionBtn.textContent = 'Start Download';
               mainActionBtn.disabled = false;
               result.textContent = 'Quality selected. Choose format and click "Start Download".';
             };
+
             qualityList.appendChild(li);
           });
+
           qualityBtn.style.display = '';
           qualityBtn.textContent = 'Select Quality';
+          setQualityAttention(true);
+
+          qualitySelect.style.display = 'none';
+          formatSelect.style.display = 'none';
+          formatSelectWrapper.style.display = 'none'; // Format noch nicht anzeigen
+          mainActionBtn.style.display = 'none'; // Verstecke mainActionBtn, nur qualityBtn anzeigen
+          mainActionBtn.disabled = false;
+          result.textContent = '';
+        } else if (!data.ok && data.reason) {
+          qualityBtn.style.display = 'none';
           qualitySelect.style.display = 'none';
           formatSelect.style.display = 'none';
           formatSelectWrapper.style.display = 'none';
-          mainActionBtn.style.display = 'none';
-          mainActionBtn.disabled = false;
+          setMainButtonSearchState();
+
           result.textContent = '';
+          updateStatus(data.reason);
         } else {
           qualityBtn.style.display = 'none';
           qualitySelect.style.display = 'none';
           formatSelect.style.display = 'none';
           formatSelectWrapper.style.display = 'none';
-          mainActionBtn.style.display = '';
-          mainActionBtn.textContent = 'Search';
-          mainActionBtn.disabled = false;
+          setMainButtonSearchState();
+
           result.textContent = '';
           updateStatus('No qualities found.');
         }
@@ -201,49 +468,69 @@
         qualitySelect.style.display = 'none';
         formatSelect.style.display = 'none';
         formatSelectWrapper.style.display = 'none';
-        mainActionBtn.style.display = '';
-        mainActionBtn.textContent = 'Search';
-        mainActionBtn.disabled = false;
-        
+        setMainButtonSearchState();
+
+        // Prüfe ob es eine Playlist-Fehlermeldung ist
         let errorMessage = 'Could not fetch qualities.';
         if (e.errorData && e.errorData.reason) {
           errorMessage = e.errorData.reason;
         }
-        
+
         result.textContent = '';
         updateStatus(errorMessage);
       }
     }
 
     async function updateQualityOptions() {
+      if (downloadInProgress) {
+        return;
+      }
+
       const url = urlInput.value.trim();
+
       const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
+
       const isX = url.includes('twitter.com') || url.includes('x.com');
+
+      // Reset immer wenn URL sich ändert (auch wenn leer oder gleich)
+
       if (url !== lastUrl || url === '') {
         resetUIForNewUrl();
+
         lastUrl = url;
       }
+
       if (isYouTube) {
         formatSelect.style.display = 'none';
-        formatSelectWrapper.style.display = 'none';
+        formatSelectWrapper.style.display = 'none'; // Format am Anfang verstecken
         formatSelect.disabled = false;
         qualityBtn.style.display = 'none';
+        setQualityAttention(false);
+
         qualitySelect.style.display = 'none';
-        mainActionBtn.textContent = 'Search';
-        mainActionBtn.disabled = false;
+        setMainButtonSearchState();
+
         result.textContent = '';
       } else if (isX) {
         formatSelect.value = 'mp4';
         formatSelect.disabled = true;
         qualityBtn.style.display = 'none';
+        setQualityAttention(false);
+
         qualitySelect.style.display = 'none';
+        mainActionBtn.classList.remove('cancel-button');
+
         mainActionBtn.textContent = 'Start Download';
         mainActionBtn.disabled = false;
         result.textContent = '';
       } else {
         formatSelect.disabled = false;
         qualityBtn.style.display = 'none';
+        setQualityAttention(false);
+
         qualitySelect.style.display = 'none';
+        mainActionBtn.classList.remove('cancel-button');
+
         mainActionBtn.textContent = 'Start Download';
         mainActionBtn.disabled = false;
         result.textContent = '';
@@ -251,25 +538,41 @@
     }
 
     urlInput.addEventListener('input', (e) => {
+      if (downloadInProgress) {
+        return;
+      }
+
       const currentUrl = e.target.value.trim();
-      
+
+      // Wenn sich die URL ändert, reset
       if (currentUrl !== lastUrl) {
         resetUIForNewUrl();
+
         lastUrl = currentUrl;
       }
-      
+
+      // Wenn URL gleich ist, aber User tippt aktiv (z.B. löschen und wieder einfügen),
+      // wird das durch das Input-Event erkannt - aber wir müssen sicherstellen,
+      // dass der State zurückgesetzt wird wenn User auf Search klickt
       updateQualityOptions();
+
       result.textContent = '';
       mainActionBtn.disabled = false;
     });
-    
+
+    // Zusätzlich: Beim Fokus auf Input-Feld, wenn bereits eine URL vorhanden ist,
+    // könnte User sie ändern wollen - aber nicht automatisch reset
     urlInput.addEventListener('focus', () => {
+      // Optional: Hier könnte man einen visuellen Hinweis geben
     });
-    
+
+    // Reset beim Fokus-Verlust wenn URL sich geändert hat
     urlInput.addEventListener('blur', () => {
       const currentUrl = urlInput.value.trim();
+
       if (currentUrl !== lastUrl && currentUrl !== '') {
         resetUIForNewUrl();
+
         lastUrl = currentUrl;
       }
     });
@@ -279,216 +582,318 @@
       customFormatDisplay.onclick = function() {
         customFormatOptions.classList.toggle('show');
       };
-      
-      const originalWindowClick = window.onclick;
-      window.onclick = function(event) {
-        if (originalWindowClick) originalWindowClick(event);
-        if (event.target == qualityModal) {
-          qualityModal.style.display = 'none';
-        }
-        if (!event.target.matches('.custom-select-selected') && !event.target.matches('.custom-select-option') && !event.target.closest('.custom-select')) {
-          customFormatOptions.classList.remove('show');
-        }
-      };
-      
+
+      // Option-Klick-Handler
       const formatOptions = customFormatOptions.querySelectorAll('.custom-select-option');
+
       formatOptions.forEach(option => {
         option.onclick = function() {
           const value = this.getAttribute('data-value');
+
           formatSelect.value = value;
-          
+          // Update Display
           formatOptions.forEach(opt => opt.classList.remove('selected'));
+
           this.classList.add('selected');
+
           customFormatDisplay.textContent = this.textContent;
-          
+          // Schließe Dropdown
           customFormatOptions.classList.remove('show');
         };
       });
-      
+
+      // Setze initiale Auswahl
       if (formatOptions.length > 0) {
         formatOptions[0].classList.add('selected');
       }
     }
-    
+
     qualityBtn.onclick = function() {
       if (lastQualities.length > 0) {
         qualityModal.style.display = 'flex';
       }
     };
+
     qualityList.addEventListener('click', function(e) {
       if (e.target && e.target.nodeName === 'LI') {
         mainActionBtn.disabled = false;
         result.textContent = '';
       }
     });
+
     closeModal.onclick = function() {
       qualityModal.style.display = 'none';
     };
+
+    updateFooterLink.onclick = function() {
+      updateModal.style.display = 'flex';
+    };
+
+    updateModalClose.onclick = function() {
+      updateModal.style.display = 'none';
+    };
+
     window.onclick = function(event) {
       if (event.target == qualityModal) {
         qualityModal.style.display = 'none';
+      }
+
+      if (event.target == updateModal) {
+        updateModal.style.display = 'none';
+      }
+
+      if (!event.target.matches('.custom-select-selected') && !event.target.matches('.custom-select-option') && !event.target.closest('.custom-select')) {
+        customFormatOptions.classList.remove('show');
       }
     };
 
     downloadForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+
+      if (downloadInProgress) {
+        await cancelActiveDownload();
+
+        return;
+      }
+
       const url = urlInput.value.trim();
+
       const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
+
       const isX = url.includes('twitter.com') || url.includes('x.com');
+
       const format = formatSelect.value;
       let quality = qualityBtn.style.display !== 'none' && selectedQuality ? selectedQuality : '';
       if (!url) {
         result.textContent = 'Please enter a valid URL.';
         return;
       }
-      
+
+      // WICHTIG: Prüfe ob Qualitäten bereits geladen wurden UND ob eine Quality ausgewählt wurde
+      // Wenn keine Qualitäten geladen wurden ODER keine Quality ausgewählt wurde, dann suche
       if (isYouTube) {
+        // Wenn Button-Text "Search" ist, immer suchen (auch wenn State noch gesetzt ist)
+
         if (mainActionBtn.textContent === 'Search') {
+          // Reset State wenn URL sich geändert hat
           if (url !== lastUrl) {
             resetUIForNewUrl();
+
             lastUrl = url;
           }
+
           searchClicked = true;
           await fetchYouTubeQualities(url);
+
           return;
         }
-        
+
+        // Wenn URL sich geändert hat, reset State
         if (url !== lastUrl) {
           resetUIForNewUrl();
+
           lastUrl = url;
         }
-        
+
+        // Wenn keine Qualitäten geladen wurden ODER keine Quality ausgewählt wurde, dann suche
         if (!qualitiesLoaded || !selectedQuality) {
           searchClicked = true;
           await fetchYouTubeQualities(url);
+
           return;
         }
       }
+
+      // Prüfe ob Quality ausgewählt wurde
       if (isYouTube && qualitiesLoaded && !selectedQuality) {
         result.textContent = 'Please select a quality first.';
         mainActionBtn.disabled = false;
         return;
       }
+
       if (isYouTube && selectedQuality) {
         quality = selectedQuality;
       }
+
+      // Stoppe Cache-Reset-Timer und markiere Download als aktiv
       if (cacheResetTimeout) {
         clearTimeout(cacheResetTimeout);
+
         cacheResetTimeout = null;
       }
-      downloadInProgress = true;
-      
+
       updateStatus('Starting download...');
+
       result.textContent = '';
-      mainActionBtn.disabled = true;
-      
+      // Generiere Session-ID für Status-Updates
       const sessionId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+
+      activeSessionId = sessionId;
+      activeAbortController = new AbortController();
+
+      cancelRequested = false;
+      downloadInProgress = true;
+      setDownloadButtonRunning(true);
+
       let query = `/download?url=${encodeURIComponent(url)}&session_id=${sessionId}`;
       if (!formatSelect.disabled) query += `&format=${format}`;
       if (isYouTube && quality) query += `&quality=${quality}`;
-      
-      let eventSource = null;
-      
       try {
-        eventSource = new EventSource(`/status?session_id=${sessionId}`);
-        
+        // Starte SSE-Verbindung VOR dem Download
+        activeEventSource = new EventSource(`/status?session_id=${sessionId}`);
+
+        // Warte kurz, damit SSE-Verbindung bereit ist
         await new Promise(resolve => setTimeout(resolve, 100));
-        
-        eventSource.onmessage = (event) => {
+
+        activeEventSource.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
+
             if (data.status) {
               updateStatus(data.status);
+
+              if (data.status === 'Download cancelled') {
+                cancelRequested = true;
+              }
             }
           } catch (e) {
+            // Ignoriere Parse-Fehler
           }
         };
-        eventSource.onerror = (error) => {
-          if (eventSource) {
-            eventSource.close();
-            eventSource = null;
-          }
+
+        activeEventSource.onerror = (error) => {
+          // SSE-Verbindung geschlossen oder Fehler
+          closeActiveEventSource();
         };
-        
-        const res = await fetch(query, { method: 'GET' });
-        
+
+        // Starte Download (nachdem SSE-Verbindung bereit ist)
+
+        const res = await fetch(query, { method: 'GET', signal: activeAbortController.signal });
+
         if (res.status === 200 && res.headers.get('Content-Type') && res.headers.get('Content-Type').includes('application/json')) {
           const data = await res.json();
+
           if (!data.ok) {
+            finishDownloadState();
+
+            result.textContent = data.reason || 'Invalid or unsupported link.';
             updateStatus('');
-            result.textContent = 'Invalid or unsupported link.';
-            mainActionBtn.disabled = false;
-            downloadInProgress = false;
+
+            startCacheResetTimer();
+
             return;
           }
         } else if (res.status !== 200) {
-          updateStatus('');
-            result.textContent = 'Invalid or unsupported link.';
-            mainActionBtn.disabled = false;
-            downloadInProgress = false;
-            startCacheResetTimer();
-            return;
+          let errorMessage = 'Invalid or unsupported link.';
+          try {
+            const data = await res.json();
+
+            if (data.reason) {
+              errorMessage = data.reason;
+            }
+          } catch (e) {
+            // Response was not JSON.
+          }
+
+          const wasCancelled = cancelRequested || res.status === 499;
+          finishDownloadState();
+
+          if (wasCancelled) {
+            result.textContent = '';
+            updateStatus('Download cancelled');
+
+            setTimeout(() => updateStatus(''), 2000);
+          } else {
+            updateStatus('');
+
+            result.textContent = errorMessage;
+          }
+
+          startCacheResetTimer();
+
+          return;
         } else {
+          // Server hat fertige Datei gesendet, jetzt verarbeiten wir sie
           updateStatus('Preparing file...');
+
           const blob = await res.blob();
+
           const contentDisposition = res.headers.get('Content-Disposition');
+
           let filename = 'download';
           if (contentDisposition) {
             const match = contentDisposition.match(/filename\*=UTF-8''([^;\n]*)/);
+
             if (match) filename = decodeURIComponent(match[1]);
           }
+
           const urlBlob = window.URL.createObjectURL(blob);
+
           const a = document.createElement('a');
+
           a.href = urlBlob;
           a.download = filename;
           document.body.appendChild(a);
+
           a.click();
+
           a.remove();
+
           window.URL.revokeObjectURL(urlBlob);
+
           updateStatus('Download ready');
+
+          finishDownloadState();
+
           setTimeout(() => {
             updateStatus('');
-          }, 2000);
+          }, 2000); // Verstecke Status nach 2 Sekunden
           result.textContent = '';
-          mainActionBtn.disabled = false;
-          downloadInProgress = false;
-          
-          if (eventSource) {
-            eventSource.close();
-            eventSource = null;
-          }
-          
+          // Starte Timer NACH erfolgreichem Download (5 Minuten Inaktivität)
+
           startCacheResetTimer();
         }
       } catch (err) {
-        updateStatus('');
-        result.textContent = 'Invalid or unsupported link.';
-        mainActionBtn.disabled = false;
-        downloadInProgress = false;
-        
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
+        const wasCancelled = cancelRequested || err.name === 'AbortError';
+        finishDownloadState();
+
+        if (wasCancelled) {
+          result.textContent = '';
+          updateStatus('Download cancelled');
+
+          setTimeout(() => updateStatus(''), 2000);
+        } else {
+          updateStatus('');
+
+          result.textContent = 'Invalid or unsupported link.';
         }
-        
+
         startCacheResetTimer();
       }
     });
 
     logoutBtn.onclick = async function() {
       await fetch('/logout', { method: 'POST' });
+
       window.location.href = '/login.html';
     };
 
-    window.addEventListener('DOMContentLoaded', showLogoutIfLoggedIn);
+    window.addEventListener('DOMContentLoaded', function() {
+      showLogoutIfLoggedIn();
+
+      checkForStrimDLUpdate(false);
+    });
+
     window.addEventListener('pageshow', function() {
       result.textContent = '';
       mainActionBtn.disabled = false;
     });
+
     window.addEventListener('beforeunload', function() {
       result.textContent = '';
       mainActionBtn.disabled = false;
     });
+
   </script>
 </body>
 </html>

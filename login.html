@@ -22,9 +22,12 @@
   </div>
   <script>
     const loginForm = document.getElementById('loginForm');
+
     const result = document.getElementById('result');
+
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
       result.textContent = '⏳ Logging in...';
@@ -33,13 +36,16 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
       });
+
       const data = await res.json();
+
       if (data.ok) {
         window.location.href = '/';
       } else {
         result.textContent = '❌ Login failed!';
       }
     });
+
   </script>
 </body>
-</html> 
+</html>
